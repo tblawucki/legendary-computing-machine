@@ -1,0 +1,20 @@
+#HELP#
+#boolean fields -> True or False
+#list values separated by semicolon a;b;c
+
+[DEFAULT]
+sku_path = ./datasets
+sku_output_path = ./datasets_sanitized
+
+[PREPROCESSING]
+remove_trend = False
+scale = True
+standarize = True
+crop_idx = 326
+drop_cols = koniec_tygodnia;poziom4;poziom2
+
+[CLUSTERING]
+n_clusters = 4
+
+[FORECASTING]
+rnn_cell = LSTM
