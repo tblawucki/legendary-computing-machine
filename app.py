@@ -6,150 +6,42 @@ Complete app for SKU preprocessing, clustering and forecasting
 @company: SmartGeometries SP. Z.O.O
 """
 import configparser
-import os
 import pandas as pd
 import numpy as np
+import os
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-
+from preprocessor import SKU_Preprocessor
+from clusterer import SKU_Clusterer
+from forecaster import SKU_Forecaster
+import sklearn.metrics as metrics
 # =============================================================================
-# 1. Preprocess raw SKU files
-#   a) Scale to -1 <=> 1
-#   b) Standarize datasets
-#   c) Remove trend from data
-#   d) fill NaN values
-#   e) remove text/date columns
-#   f) save as new files
+# TEST SERIES GENERATOR
 # =============================================================================
 
+def sine_function(X):
+    return np.sin(X) + 0.2 * np.cos(0.3 * X + np.random.random()) + np.sin(5 * X) + np.random.random()
 
-class TrendRemover:
-    def __init__(self):
-        self.fst_elements = {}
-    
-    def fit_transform(self, df, columns = []):
-        if len(columns) == 0:
-            self.columns = df.columns
-        else:
-            self.columns = columns
-        for c in self.columns:
-            self.fst_elements[c] = df[c][:1]
-            df[c][1:] = np.diff(df[c])
-        return df
-        
-    def inverse_transform(self, df):
-        return np.cumsum(df)
-        
-    
-class SKU_Preprocessor:
-    def __init__(self, sku_path, sku_output_path='', remove_trend=False, 
-                 standarize=False, scale=False, crop_idx=None,  drop_cols=[], *args, **kwargs):
-        '''
-        Constructor of SKU Preprocessor class
-        parameters:
-            sku_path -> path to folder with sku files
-            sku_output_path -> target directory where class can save transformed dataset. 
-                If None files will overwrite originals.
-            remove_trend -> flag indicating trend removal option. Default = False
-            standarize -> flag indicating standarization process. Default = False
-            scale -> flag indicating scaling process. Default = False
-        '''
-        self.sku_path = sku_path
-        self.sku_output_path = sku_output_path if sku_output_path != '' else sku_path
-        self.remove_trend = True if remove_trend == 'True' else False
-        self.standarize = True if standarize == 'True' else False
-        self.scale = True if scale == 'True' else False
-        self.transform_ops = {}
-        self.dataframes = {}
-        self.crop_idx = int(crop_idx)
-        self.drop_cols = drop_cols.split(';')
-        print(self.sku_path, 
-              self.sku_output_path, 
-              self.remove_trend, 
-              self.standarize, 
-              self.scale,
-              self.crop_idx,
-              self.drop_cols)
-        
-        
-    def fit_transform(self, df, df_key):
-        pass
-    
-    def fit(self, df, df_key):
-        self.transform_ops[df_key] = {}
-        self.transform_ops[df_key]['scaler'] = scaler = MinMaxScaler()
-        self.transform_ops[df_key]['standarizer'] = standarizer = StandardScaler()
-        self.transform_ops[df_key]['trend_remover'] = trend_remover = TrendRemover()
+def simple_sine_function(X):
+    return np.sin(X + np.random.random()) * np.random.uniform(0.5, 1)
 
-    def transform(self, df, df_key):
-        '''
-        Main method applying cleaning, removing trend, normalizing 
-        and scaling dataset through all columns in target dataset
-        '''
-        pass
+def line_function(X):
+    return 0*X + np.random.random()
 
-    def inverse_transform(self, df):
-        pass
+def random_noise(X):
+    return np.random.uniform(size=X.ravel().shape[0])
 
-    def _remove_columns(self, df):
-        '''
-        Method for string and datetime type columns removal.
-        '''
-        df.drop(columns=self.drop_cols, axis=1, inplace = True)
-        return df
-    
-    def _remove_trend(self, df, operator, columns=None,):
-        '''
-        Method for removing trend from time series.
-        '''
-        df = operator.fit_transform(df, columns)
-        return df
-        
-    def _save_dataframe(self, df, filename):
-        if not os.path.exists(self.sku_output_path):
-            os.mkdir(self.sku_output_path)
-        df.to_csv(os.join(self.sku_output_path, filename), 
-                  index=False,
-                  encoding='cp1252',
-                  sep=';')
-
-    def _sanitize_dataset(self, df):
-        return df.fillna(value=0)
-    
-    def run(self):
-        '''
-        Method executing whole preprocessing step.        
-        '''
-        files = os.listdir(self.sku_path)
-        for file in files:
-            self.transform_ops[file] = {}
-            self.transform_ops[file]['scaler'] = scaler = MinMaxScaler()
-            self.transform_ops[file]['standarizer'] = standarizer = StandardScaler()
-            self.transform_ops[file]['trend_remover'] = trend_remover = TrendRemover()
-            df = pd.read_csv(os.path.join(self.sku_path, file),
-                                               encoding='cp1252',
-                                               sep=';')[:self.crop_idx]
-            df = df.fillna(value=0)
-            df_copy = df.copy()
-            df = self._remove_columns(df)
-            df_cols = df.columns
-            df = df.astype(np.float64)
-            if self.remove_trend:
-                df = trend_remover.fit_transform(df, df.columns)
-            if self.standarize:
-                df = standarizer.fit_transform(df)
-            if self.scale:
-                df = scaler.fit_transform(df)
-        df = pd.DataFrame(df, columns=df_cols)
-        self.dataframes[file] = df
-        return self.dataframes 
-# =============================================================================
-# 2. Datasets Clustering
-# =============================================================================
-
-# =============================================================================
-# 3. Create LSTM/GRU based models for prediction on clustered time series
-# =============================================================================
+def generate_dataset(time, functions, n_sequences, offset=10):
+    sequences = []
+    classes = []
+    label_sequences = []
+    for i in range(n_sequences):
+        time = time + np.random.random()*10
+        function = np.random.choice(functions)
+        sequence = function(time)
+        sequences.append(sequence[:-offset])
+        label_sequences.append(sequence[-offset:])
+    return np.array(sequences).reshape(n_sequences, -1, 1), \
+           np.array(label_sequences).reshape(n_sequences, -1)
 
 # =============================================================================
 # 4. Rescale/destandarize result of prediction
@@ -170,27 +62,149 @@ if __name__ == '__main__':
         config.read('./config.cnf')
     except:
         print('No config file!')
-    
+
+    #configuration sections
     default_section = config['DEFAULT']
     preprocessing_section = config['PREPROCESSING']
     clustering_section = config['CLUSTERING']
     forecasting_section = config['FORECASTING']
-       
-    
+
+# =============================================================================
+#     Training Section
+# =============================================================================
+#%% BEGIN OF TRAINING SECTION
+    #preprocessing
     sp = SKU_Preprocessor(**{**default_section, **preprocessing_section})
-    dfs = sp.run()
-    df = dfs['dane_parametry BLGWK-08-00-1500-KR-S355.csv']
-    plt.plot(df, alpha=0.6)
+#    sp.run()
+
+    #clustering
+    sc = SKU_Clusterer(**clustering_section)
+    dsts = sc._load_datasets()
+    sc.train()
+
+    #forecasting
+    sf = SKU_Forecaster(**forecasting_section)
+    X, y = sf._load_datasets()
+    cluster, cluster_idxs = sc.cluster(X)
     
-    df_cp = df.copy()
-    tr = TrendRemover()
-#    plt.figure()
-#    plt.plot(df, alpha=0.4)
-    df = tr.fit_transform(df)
+    classes = set(cluster_idxs)
+    forecasters = {}
+    
+    for cl in classes:
+        mask = cluster_idxs == cl
+        
+        X_cl = X[mask]
+        y_cl = y[mask]
+        forecaster = sf.train(X_cl, y_cl, model_name=str(cl))
+        forecasters[cl] = forecaster
+#%%END OF TRAINING SECTION
+# =============================================================================
+#     Evaluation Section
+# =============================================================================
+#%% BEGIN OF EVALUATION SECTION
+    # SKU file preparation
+    sku_files = os.listdir(default_section['sku_path'])
+    chosen_sku = sku_files[0]
+    sku = pd.read_csv(os.path.join(default_section['sku_path'], chosen_sku),
+                encoding='cp1252',
+                sep=';')
+    preprocessor = SKU_Preprocessor(**preprocessing_section)
+    sku_prep = preprocessor._remove_columns(sku)
+    sku_prep = preprocessor._sanitize_dataset(sku_prep)
+    sku_prep = preprocessor.fit_transform(sku_prep, 'test_sku')
+    
+    # choose sequence for forecasting
+    input_sequence = sku_prep[262:312]
+    label_sequence = sku_prep[312:324][forecasting_section['forecast_column']]
+    
+    # assign series to cluster
+    _, sequence_class = sc.cluster(input_sequence.values.reshape(-1, 
+                                                                 input_sequence.shape[0], 
+                                                                 input_sequence.shape[1]))
+    sequence_class = sequence_class[0]
+    print(f'class of sequence: {sequence_class}')
+    
+    # get apropriate forecaster for cluster class
+    forecaster = forecasters[sequence_class]
+    forecast = forecaster.predict(input_sequence.values.reshape(-1,
+                                                                 input_sequence.shape[0],
+                                                                 input_sequence.shape[1]))
+#    plt.plot(forecast.ravel())
+#    plt.plot(label_sequence.ravel())
+    
+    # inverse transform output to the original space
+    original = sku[262:312].reset_index(drop=True)
+    label = sku[312:324][forecasting_section['forecast_column']].reset_index(drop=True)
+    rescaled = preprocessor.inverse_transform(input_sequence, 'test_sku')
+#    for c in sku.columns:
+#        rescaled[c] += original[c][:1]
+#    for c in sku.columns:
+#        plt.figure()
+#        plt.plot(rescaled[c], label='rescaled')
+#        plt.plot(original[c], label='original')
+        
+        
+    seq_with_forecast = np.append(input_sequence[forecasting_section['forecast_column']], forecast)
+    seq_with_forecast_repeated = np.array(np.repeat([seq_with_forecast], 14, axis=0)).T
+    _df = pd.DataFrame(seq_with_forecast_repeated, columns=sku.columns)
+    rescaled = preprocessor.inverse_transform(_df, 'test_sku')[forecasting_section['forecast_column']]
+    
+    const = original[forecasting_section['forecast_column']][0] - rescaled.ravel()[0]
     plt.figure()
-    plt.plot(df, alpha=0.4)
-    df = tr.inverse_transform(df)
+    rescaled += const
+    plt.plot(rescaled.ravel())
+    plt.plot(original[forecasting_section['forecast_column']])
+    plt.plot(list(range(50, 62)), label)
     
-    plt.figure(figsize=(10, 10))
-    plt.plot(df, alpha=0.4)
-    plt.plot(df_cp, alpha=0.4)
+    #Error measurement
+    mae = metrics.mean_absolute_error(label, rescaled[-12:])
+    mse = metrics.mean_squared_error(label, rescaled[-12:])
+    mmae = metrics.median_absolute_error(label, rescaled[-12:])
+    
+    error_dict = {'Mean Squared Error':mse,
+                  'Mean Absolute Error': mae,
+                  'Median Absolute Error': mmae}
+    print(error_dict)
+#%% END OF EVALUATION SECION
+# =============================================================================
+#     Test Section
+# =============================================================================
+    
+#    pred = forecaster.predict(X[0].reshape(-1, 50, 14))
+#    plt.figure()
+#    plt.plot(pred.ravel(), label='prediction')
+#    plt.plot(y[0], label='true')
+#    plt.legend()
+    
+# =============================================================================
+
+#    n_steps = int(forecasting_section['n_steps'])
+#    forecast_horizon = int(forecasting_section['forecast_horizon'])
+#    seq_len = n_steps + forecast_horizon
+#    n_sequences = 100
+#    functions = [simple_sine_function, sine_function]
+#    #functions = [random_noise, sine_function, simple_sine_function]
+#    T = np.linspace(0, 12, num=seq_len)
+#    X_train, y_train = generate_dataset(T, functions, n_sequences, offset=forecast_horizon)
+
+#    plt.plot(X_train[0, :, :])
+#    plt.plot(list(range(50, 60)), y_train[0, :, :])
+
+#    
+#    plt.figure(figsize=(10, 6))
+#    plt.plot(sf.forecaster.history.history['loss'])
+#    plt.plot(sf.forecaster.history.history['val_loss'])
+#    
+#    
+#    X_test, y_test = generate_dataset(T, functions, 5, offset=forecast_horizon)
+#    pred = sf.predict(X_test)
+#    
+#    plt.figure()
+#    plt.plot(y_test[0].ravel())
+#    plt.plot(pred[0, :].ravel())
+    col_name = 'bud_portfel'
+    original = sku_prep[238:288].reset_index(drop=True)
+    predicted = pd.DataFrame(sc.autoenc.predict(original.values.reshape(-1, 50, 14)).reshape(50,14), 
+                             columns=original.columns)
+    plt.plot(original[col_name])
+    plt.plot(predicted[col_name].ravel())

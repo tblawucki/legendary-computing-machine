@@ -14,7 +14,10 @@ class TestSkuPreprocessorMethods(unittest.TestCase):
     def test_remove_trend(self):
         pass
     
-    def test_remove_columns(self):
+    def test_remove_columns_no_columns(self):
+        pass
+
+    def test_remove_columns_chosen_columns(self):
         pass
     
     def test_inverse_transform(self):
@@ -25,3 +28,21 @@ class TestSkuPreprocessorMethods(unittest.TestCase):
 
     def test_save_dataframe(self):
         pass
+    
+    def test_sanitize_dataset_no_crop(self):
+        pass
+    
+    def test_sanitize_dataset_crop(self):
+        pass
+    
+    
+class TestTrendRemover(unittest.TestCase):
+    
+    def test_fit_transform_all_columns(self):
+        pass
+    
+    def test_fit_transform_chosen_columns(self):
+        pass
+    
+    def test_inverse_transform(self):
+        pass    
