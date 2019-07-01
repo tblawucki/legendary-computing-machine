@@ -104,7 +104,7 @@ if __name__ == '__main__':
 #%% BEGIN OF EVALUATION SECTION
     # SKU file preparation
     sku_files = os.listdir(default_section['sku_path'])
-    chosen_sku = sku_files[0]
+    chosen_sku = sku_files[25]
     sku = pd.read_csv(os.path.join(default_section['sku_path'], chosen_sku),
                 encoding='cp1252',
                 sep=';')
@@ -152,15 +152,17 @@ if __name__ == '__main__':
     const = original[forecasting_section['forecast_column']][0] - rescaled.ravel()[0]
     plt.figure()
     rescaled += const
-    plt.plot(rescaled.ravel())
+    plt.plot(rescaled.ravel(), label='predicted_output')
     plt.plot(original[forecasting_section['forecast_column']])
-    plt.plot(list(range(50, 62)), label)
-    
+    plt.plot(list(range(50, 62)), label, label='original_output')
+    plt.legend()
+    plt.title(chosen_sku)
+    plt.savefig(f'./screens/{chosen_sku}.png')
     #Error measurement
     mae = metrics.mean_absolute_error(label, rescaled[-12:])
     mse = metrics.mean_squared_error(label, rescaled[-12:])
     mmae = metrics.median_absolute_error(label, rescaled[-12:])
-    
+    print(f'SKU: {chosen_sku}')
     error_dict = {'Mean Squared Error':mse,
                   'Mean Absolute Error': mae,
                   'Median Absolute Error': mmae}
