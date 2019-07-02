@@ -70,7 +70,7 @@ class SKU_Preprocessor:
         self.transform_ops = {}
         self.dataframes = {}
         self.crop_idx = int(crop_idx) if crop_idx != '' else None
-        self.drop_cols = drop_cols.split(';')
+        self.drop_cols = drop_cols.split(';') if drop_cols else []
 
     def fit_transform(self, df, df_key):
         self.fit(df, df_key)
@@ -117,7 +117,11 @@ class SKU_Preprocessor:
         '''
         Method for string and datetime type columns removal.
         '''
-        df.drop(columns=self.drop_cols, axis=1, inplace = True)
+        for c in self.drop_cols:
+            try:
+                df.drop(columns=c, axis=1, inplace = True)
+            except:
+                print(f'omiting invalid column: {c}')
         return df
 
     def _remove_trend(self, df, operator, columns=None,):

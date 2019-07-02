@@ -15,7 +15,7 @@ import os
 # Dataset generation code
 # =============================================================================
 def sine_function(X):
-    return np.sin(X + np.random.random()) + 0.2 * np.cos(0.3 * X + np.random.random()) + np.sin(5 * X) + np.random.random()
+    return np.sin(X) + 0.2 * np.cos(0.3 * X + np.random.random()) + np.sin(5 * X) + np.random.random()
 
 def sine_function_without_random(X):
     return np.sin(X) + 0.2 * np.cos(0.3 * X) + np.sin(5 * X)
@@ -41,25 +41,29 @@ def generate_dataset(time, functions, offset=10):
     cl = np.random.choice(functions)
     cl_name = cl.__name__
     time = time + np.random.random()*10
-    for f in functions:
-        columns.append(f.__name__)
-        sequences.append(f(time))
+#    for f in functions:
+#        columns.append(f.__name__)
+#        sequences.append(f(time))
     columns.append('discriminative_col')
     sequences.append(cl(time))
     return np.array(sequences).T, columns, cl_name
 
 if __name__ == '__main__':
-    functions = [sine_function,
-                 sine_function_without_random,
+    functions = [
+                 sine_function,
+#                 sine_function_without_random,
                  simple_sine_function,
-                 simple_sine_function_without_random,
+#                 simple_sine_function_without_random,
                  line_function,
-                 line_function_without_random,
-                 random_noise]
-    t = np.linspace(0, 12, num=326)
+#                 line_function_without_random,
+#                 random_noise
+                 ]
+    t = np.linspace(0, 24, num=326)
     for f in os.listdir('./datasets/'):
         os.remove(os.path.join('./datasets/', f))
-    for i in range(20):
+    for i in range(50):
         ds, cols, cl = generate_dataset(t, functions)
         df = pd.DataFrame(ds, columns=cols)
-        df.to_csv(f'./datasets/dts_{i}_class_{cl}.csv', sep=';', index=True, index_label='trend_col', encoding='cp1252')
+        if 'sine_function' == cl:
+            plt.plot(df)
+        df.to_csv(f'./datasets/dts_{i}_class_{cl}.csv', sep=';', index=False, encoding='cp1252')

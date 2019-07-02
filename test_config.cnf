@@ -1,0 +1,45 @@
+#HELP#
+#boolean fields -> True or False
+#list values separated by semicolon a;b;c
+# if any changes made to models, set cold_start flag to True
+
+# k_mean_n_iteration = 5
+# rnn_epochs = 2500
+# endocer outputs = 300
+
+[DEFAULT]
+sku_path = ./datasets_testing
+sku_output_path = ./datasets_testing_sanitized
+n_steps = 50
+
+[PREPROCESSING]
+remove_trend = False
+scale = True
+standarize = False
+crop_idx = 326
+drop_cols = 
+
+[CLUSTERING]
+n_clusters = 3
+k_means_n_iterations = 4
+k_means_metric = euclidean
+rnn_epochs = 100
+encoder_output_units = 10
+decoder_output_units = 300
+n_steps = 50
+sku_path = ./datasets_testing_sanitized
+cold_start = False
+discriminative_columns = discriminative_col
+
+[FORECASTING]
+rnn_cell = GRU
+n_layers = 2
+n_epochs = 120
+n_neurons = 125
+batch_size = 5
+activation = tanh
+forecast_horizon = 12
+forecast_column = discriminative_col
+loss_metrics = mse
+sku_path = ./datasets_testing_sanitized/
+cold_start = True

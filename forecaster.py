@@ -8,7 +8,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, GRU
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.models import load_model
-
+import matplotlib.pyplot as plt
 
 def create_forecaseter_model(input_sequences, output_sequences, rnn_cell,
                              n_layers, n_neurons, batch_size, n_steps,
@@ -60,6 +60,7 @@ class SKU_Forecaster:
     def _load_datasets(self):
         datasets = []
         labels = []
+        columns = []
         for file in os.listdir(self.sku_path):
             df = pd.read_csv(os.path.join(self.sku_path, file),
                                                encoding='cp1252',
@@ -74,8 +75,10 @@ class SKU_Forecaster:
                                  (split_idx + 1) * self.n_steps + self.output_length]
                 datasets.append(chunk.values)
                 labels.append(chunk_label[self.forecast_column].values)
+        columns = df.columns
         return np.array(datasets, dtype=np.float64), \
-               np.array(labels, dtype=np.float64)
+               np.array(labels, dtype=np.float64), \
+               columns
         
 
     def train(self, X, y, model_name='0'):
@@ -104,6 +107,15 @@ class SKU_Forecaster:
         else:
             print('TRANING MODEL...')
             self.forecaster = create_forecaseter_model(**parameters_set)
+            hist = self.forecaster.history.history
+            loss = hist['loss']
+            val_loss = hist['val_loss']
+            plt.figure(figsize=(10, 7))
+            plt.plot(loss, label='training_loss')
+            plt.plot(val_loss, label='validation_loss')
+            plt.legend()
+            plt.title(f'Forecaster {model_name} loss')
+            plt.savefig(f'./loss/forecaster_{model_name}_loss.png')
         return self.forecaster
         
     def predict(self, X):

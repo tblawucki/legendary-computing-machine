@@ -1,3 +1,9 @@
 *.csv
 *.pkl
+*.7z
+*.zip
 garbage_code.py
+__pycache__
+loss/*
+screens/*
+
