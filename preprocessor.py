@@ -71,6 +71,7 @@ class SKU_Preprocessor:
         self.dataframes = {}
         self.crop_idx = int(crop_idx) if crop_idx != '' else None
         self.drop_cols = drop_cols.split(';') if drop_cols else []
+        self.encoding = kwargs.get('encoding', 'utf8')
 
     def fit_transform(self, df, df_key):
         self.fit(df, df_key)
@@ -136,7 +137,7 @@ class SKU_Preprocessor:
             os.mkdir(self.sku_output_path)
         df.to_csv(os.path.join(self.sku_output_path, filename),
                   index=False,
-                  encoding='cp1252',
+                  encoding=self.encoding,
                   sep=';')
 
     def _sanitize_dataset(self, df):
@@ -153,7 +154,7 @@ class SKU_Preprocessor:
         files = os.listdir(self.sku_path)
         for file in files:
             df = pd.read_csv(os.path.join(self.sku_path, file),
-                                               encoding='cp1252',
+                                               encoding=self.encoding,
                                                sep=';')
             df = self._remove_columns(df)
             df = self._sanitize_dataset(df)

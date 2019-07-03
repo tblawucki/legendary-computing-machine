@@ -2,6 +2,7 @@
 *.pkl
 *.7z
 *.zip
+*.xlsx
 garbage_code.py
 __pycache__
 loss/*

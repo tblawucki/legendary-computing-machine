@@ -35,7 +35,7 @@ class SKU_Clusterer:
         if self.k_means_metric not in ['dtw', 'euclidean', 'softdtw']:
             print('invalid k_means metric, seting to `euclidean`')
             self.k_means_metric = 'euclidean'
-            
+        self.encoding = kwargs.get('encoding', 'utf8')
         
         
     def filter_dataset(self, df):
@@ -57,7 +57,7 @@ class SKU_Clusterer:
         datasets = []
         for file in os.listdir(self.sku_path):
             df = pd.read_csv(os.path.join(self.sku_path, file),
-                                               encoding='cp1252',
+                                               encoding=self.encoding,
                                                sep=';')
             df = self.filter_dataset(df)
             n_splits = df.shape[0] // self.n_steps

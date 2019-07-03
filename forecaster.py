@@ -9,6 +9,8 @@ from tensorflow.keras.layers import LSTM, GRU
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.utils import plot_model
 
 def create_forecaseter_model(input_sequences, output_sequences, rnn_cell,
                              n_layers, n_neurons, batch_size, n_steps,
@@ -31,14 +33,20 @@ def create_forecaseter_model(input_sequences, output_sequences, rnn_cell,
     model.add(Dense(output_length))
     model.compile(optimizer='adam', loss=loss_metrics)
     model.summary()
+    
+    es = EarlyStopping(monitor='val_loss', min_delta=0.00001, patience=100, mode='auto', restore_best_weights=True)
     model.fit(x=input_sequences,
               y=output_sequences,
               validation_split = 0.1,
               epochs=n_epochs,
               batch_size=batch_size,
-              shuffle=False)
+              shuffle=False,
+              callbacks=[es])
     print(f'SAVING MODEL TO "./models/forecaster_{model_name}.pkl"')
     model.save(f'./models/forecaster_{model_name}.pkl')
+    
+    plot_model(model, to_file=f'./architecture/forecaster_{model_name}_arch.png', show_shapes=True, show_layer_names=True, rankdir='TB')
+
     return model
 
 class SKU_Forecaster:
@@ -56,6 +64,7 @@ class SKU_Forecaster:
         self.sku_path = kwargs.get('sku_path')
         self.cold_start = True if kwargs.get('cold_start') == 'True' else False 
         self.trained = False
+        self.encoding = kwargs.get('encoding', 'utf8')
 
     def _load_datasets(self):
         datasets = []
@@ -63,7 +72,7 @@ class SKU_Forecaster:
         columns = []
         for file in os.listdir(self.sku_path):
             df = pd.read_csv(os.path.join(self.sku_path, file),
-                                               encoding='cp1252',
+                                               encoding=self.encoding,
                                                sep=';')
             n_splits = df.shape[0] // self.n_steps
             trim = df.shape[0] % self.n_steps

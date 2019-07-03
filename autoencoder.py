@@ -5,6 +5,8 @@ from tensorflow import keras
 from tensorflow.keras import Sequential, Model
 from tensorflow.keras.layers import Input, LSTM, GRU, RepeatVector, TimeDistributed, Dense
 from tensorflow.keras.models import load_model
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.utils import plot_model
 
 
 def create_autoencoder_models(dataset, n_steps, n_features, epochs=300, enc_units=100, dec_units=300, color_idx=0):
@@ -39,8 +41,10 @@ def create_autoencoder_models(dataset, n_steps, n_features, epochs=300, enc_unit
     # Training 
     # =============================================================================
 
+    es = EarlyStopping(monitor='val_loss', min_delta=0.00001, patience=20, mode='auto', restore_best_weights=True)
+
     autoencoder.compile(optimizer='adam', loss='mse', metrics=['mse'])
-    autoencoder.fit(dataset, dataset, epochs=epochs, shuffle=True, validation_split=0.1)
+    autoencoder.fit(dataset, dataset, epochs=epochs, shuffle=True, validation_split=0.1, callbacks=[es])
 
     # =============================================================================
     # Save and return models    
@@ -48,4 +52,9 @@ def create_autoencoder_models(dataset, n_steps, n_features, epochs=300, enc_unit
     autoencoder.save('./models/autoencoder.pkl')
     encoder_model.save('./models/encoder.pkl')
     decoder_model.save('./models/decoder.pkl')
+
+    plot_model(autoencoder, to_file='./architecture/autoencoder_arch.png', show_shapes=True, show_layer_names=True, rankdir='TB')
+    plot_model(encoder_model, to_file='./architecture/encoder_arch.png', show_shapes=True, show_layer_names=True, rankdir='TB')
+    plot_model(decoder_model, to_file='./architecture/decoder_arch.png', show_shapes=True, show_layer_names=True, rankdir='TB')
+    
     return autoencoder, encoder_model, decoder_model 
