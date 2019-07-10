@@ -47,6 +47,7 @@ if __name__ == '__main__':
     #forecasting
     sf = SKU_Forecaster(**forecasting_section)
     X, y, columns = sf._load_datasets()
+    y = y.reshape(*y.shape, 1)
     X_filtered = np.array([sc.filter_dataset(pd.DataFrame(_X, columns = columns)).values for _X in X])
     cluster, cluster_idxs = sc.cluster(X_filtered)
     
@@ -76,13 +77,13 @@ if __name__ == '__main__':
 
 
     input_begin = 262
-    input_length = 50
-    output_length = 12
+    input_length = int(forecasting_section['n_steps'])
+    output_length = int(forecasting_section['forecast_horizon'])
     output_begin = input_begin + input_length
     
     input_range = range(input_begin, input_begin + input_length)
     output_range = range(output_begin, output_begin + output_length)
-
+    prediction_range = range(input_begin + output_length, input_begin + input_length + output_length)
 
     for f in os.listdir(default_section['sku_path']):
         chosen_sku = f
@@ -118,16 +119,17 @@ if __name__ == '__main__':
 #        label = sku[312:324][forecasting_section['forecast_column']].reset_index(drop=True)
         rescaled = preprocessor.inverse_transform(input_sequence, 'test_sku')
             
-        seq_with_forecast = np.append(input_sequence[forecasting_section['forecast_column']], forecast)
+#        seq_with_forecast = np.append(input_sequence[forecasting_section['forecast_column']], forecast)
+        seq_with_forecast = forecast.ravel()
         seq_with_forecast_repeated = np.array(np.repeat([seq_with_forecast], n_features, axis=0)).T
         _df = pd.DataFrame(seq_with_forecast_repeated, columns=sku.columns)
         rescaled = preprocessor.inverse_transform(_df, 'test_sku')[forecasting_section['forecast_column']]
 
         # forecast visualisation
-        const = original[forecasting_section['forecast_column']][0] - rescaled.ravel()[0]
+        const = original[forecasting_section['forecast_column']][0] - rescaled.ravel()
         plt.figure()
         rescaled += 0#const
-        plt.plot(list(output_range), rescaled.ravel()[-12:], label='predicted_output')
+        plt.plot(list(prediction_range), rescaled.ravel(), label='predicted_output')
         plt.plot(list(input_range), original[forecasting_section['forecast_column']])
         plt.plot(list(output_range), label, label='original_output')
         plt.grid(linestyle='--')

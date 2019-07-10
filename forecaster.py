@@ -5,8 +5,7 @@ import os
 import pandas as pd
 import numpy as np
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, GRU
-from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import LSTM, GRU, Dense, TimeDistributed
 from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
 from tensorflow.keras.callbacks import EarlyStopping
@@ -27,21 +26,21 @@ def create_forecaseter_model(input_sequences, output_sequences, rnn_cell,
     model.add(rnn_cell(n_neurons,
                                input_shape=(n_steps,
                                             n_features),
-                               return_sequences=False,
+                               return_sequences=True,
                                stateful=False,
                                activation=activation))
-    model.add(Dense(output_length))
+    model.add(TimeDistributed(Dense(1)))
     model.compile(optimizer='adam', loss=loss_metrics)
     model.summary()
     
-    es = EarlyStopping(monitor='val_loss', min_delta=0.00001, patience=100, mode='auto', restore_best_weights=True)
+    es = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=50, mode='auto', restore_best_weights=True)
     model.fit(x=input_sequences,
               y=output_sequences,
               validation_split = 0.1,
               epochs=n_epochs,
               batch_size=batch_size,
               shuffle=False,
-              callbacks=[es])
+              callbacks=[])
     print(f'SAVING MODEL TO "./models/forecaster_{model_name}.pkl"')
     model.save(f'./models/forecaster_{model_name}.pkl')
     
@@ -65,8 +64,11 @@ class SKU_Forecaster:
         self.cold_start = True if kwargs.get('cold_start') == 'True' else False 
         self.trained = False
         self.encoding = kwargs.get('encoding', 'utf8')
+        self.full_dataset = True if kwargs.get('full_dataset') == 'True' else False
+        self._load_datasets = self._load_datasets_full if self.full_dataset else self._load_datasets_partial
 
-    def _load_datasets(self):
+
+    def _load_datasets_partial(self):
         datasets = []
         labels = []
         columns = []
@@ -80,15 +82,37 @@ class SKU_Forecaster:
             for split_idx in range(n_splits):
                 chunk = df[split_idx * self.n_steps : \
                            (split_idx + 1) * self.n_steps]
-                chunk_label = df[(split_idx + 1) * self.n_steps : \
+                chunk_label = df[split_idx * self.n_steps + self.output_length : \
                                  (split_idx + 1) * self.n_steps + self.output_length]
+                datasets.append(chunk.values)
+                labels.append(chunk_label[self.forecast_column].values)
+        columns = df.columns
+        print(type(datasets), len(datasets), datasets[-1])
+        return np.array(datasets, dtype=np.float64), \
+               np.array(labels, dtype=np.float64), \
+               columns
+    
+    def _load_datasets_full(self):
+        datasets = []
+        labels = []
+        columns = []
+        for file in os.listdir(self.sku_path):
+            df = pd.read_csv(os.path.join(self.sku_path, file),
+                                               encoding=self.encoding,
+                                               sep=';')
+            n_splits = df.shape[0] // self.n_steps
+            trim = df.shape[0] % self.n_steps
+#            df = df[trim:]
+#            for offset in range(n_splits * (self.n_steps - 1) - trim - self.output_length):
+            for offset in range((n_splits -1) * self.n_steps):
+                chunk = df[offset : offset + self.n_steps]
+                chunk_label = df[offset + self.output_length : offset + self.n_steps + self.output_length]
                 datasets.append(chunk.values)
                 labels.append(chunk_label[self.forecast_column].values)
         columns = df.columns
         return np.array(datasets, dtype=np.float64), \
                np.array(labels, dtype=np.float64), \
                columns
-        
 
     def train(self, X, y, model_name='0'):
         self.trained = True

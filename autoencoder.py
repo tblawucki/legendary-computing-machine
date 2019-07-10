@@ -9,7 +9,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.utils import plot_model
 
 
-def create_autoencoder_models(dataset, n_steps, n_features, epochs=300, enc_units=100, dec_units=300, color_idx=0):
+def create_autoencoder_models(dataset, n_steps, n_features, epochs=300, enc_units=100, dec_units=300, color_idx=0, batch_size=32):
     keras.backend.clear_session()   
     # =============================================================================
     #  Model creation
@@ -41,10 +41,10 @@ def create_autoencoder_models(dataset, n_steps, n_features, epochs=300, enc_unit
     # Training 
     # =============================================================================
 
-    es = EarlyStopping(monitor='val_loss', min_delta=0.00001, patience=20, mode='auto', restore_best_weights=True)
+    es = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=50, mode='auto', restore_best_weights=True)
 
     autoencoder.compile(optimizer='adam', loss='mse', metrics=['mse'])
-    autoencoder.fit(dataset, dataset, epochs=epochs, shuffle=True, validation_split=0.1, callbacks=[es])
+    autoencoder.fit(dataset, dataset, epochs=epochs, batch_size = batch_size, shuffle=True, validation_split=0.1, callbacks=[es])
 
     # =============================================================================
     # Save and return models    

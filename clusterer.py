@@ -36,8 +36,9 @@ class SKU_Clusterer:
             print('invalid k_means metric, seting to `euclidean`')
             self.k_means_metric = 'euclidean'
         self.encoding = kwargs.get('encoding', 'utf8')
-        
-        
+        self.full_dataset = kwargs.get('full_dataset', False)
+        self._load_datasets = self._load_datasets_full if self.full_dataset == 'True' else self._load_datasets_partial
+        self.batch_size = int(kwargs.get('batch_size', 1))
     def filter_dataset(self, df):
         chosen_cols = []
         for c in self.discriminative_cols:
@@ -53,7 +54,7 @@ class SKU_Clusterer:
             print('No discriminative columns passed, running algoritm on all columns')
         return df
         
-    def _load_datasets(self):
+    def _load_datasets_partial(self):
         datasets = []
         for file in os.listdir(self.sku_path):
             df = pd.read_csv(os.path.join(self.sku_path, file),
@@ -65,6 +66,21 @@ class SKU_Clusterer:
             df = df[trim:]
             for split_idx in range(n_splits):
                 chunk = df[split_idx * self.n_steps : (split_idx + 1) * self.n_steps]
+                datasets.append(chunk.values)
+        return np.array(datasets, dtype=np.float64)
+    
+    def _load_datasets_full(self):
+        datasets = []
+        for file in os.listdir(self.sku_path):
+            df = pd.read_csv(os.path.join(self.sku_path, file),
+                                               encoding=self.encoding,
+                                               sep=';')
+            df = self.filter_dataset(df)
+            n_splits = df.shape[0] // self.n_steps
+            trim = df.shape[0] % self.n_steps
+    #        df = df[trim:]
+            for offset in range(df.shape[0] - self.n_steps):
+                chunk = df[offset : offset + self.n_steps]
                 datasets.append(chunk.values)
         return np.array(datasets, dtype=np.float64)
         
@@ -86,8 +102,9 @@ class SKU_Clusterer:
                 self.classifier = load(model_file)
         return models_exists and k_means_exists and not cold_start
 
-    def train(self):
-        dataset = self._load_datasets()
+    def train(self, dataset=None):
+        if dataset is None:
+            dataset = self._load_datasets()
         n_features = dataset.shape[2]
         print(f'LOAD MODEL RETURNS: {self.load_models(self.cold_start)}')
         if not self.load_models(self.cold_start):
@@ -96,7 +113,8 @@ class SKU_Clusterer:
                                                         n_steps=self.n_steps,
                                                         epochs=self.n_epochs,
                                                         enc_units=self.encoder_output_units,
-                                                        dec_units=self.decoder_output_units)
+                                                        dec_units=self.decoder_output_units,
+                                                        batch_size=self.batch_size)
             hist = self.autoenc.history.history
             loss = hist['loss']
             val_loss = hist['val_loss']
