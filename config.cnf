@@ -19,12 +19,12 @@ crop_idx = 326
 drop_cols = koniec_tygodnia;poziom3;poziom2
 
 [CLUSTERING]
-n_clusters = 1
-k_means_n_iterations = 1
+n_clusters = 4
+k_means_n_iterations = 4
 k_means_metric = euclidean
-rnn_epochs = 1
+rnn_epochs = 2500
 encoder_output_units = 200
-decoder_output_units = 300
+decoder_output_units = 500
 n_steps = 50
 batch_size = 32
 sku_path = ./datasets_sanitized
@@ -36,7 +36,7 @@ cold_start = True
 [FORECASTING]
 rnn_cell = GRU
 n_layers = 4
-n_epochs = 2500
+n_epochs = 1
 n_neurons = 512
 batch_size = 10
 activation = tanh

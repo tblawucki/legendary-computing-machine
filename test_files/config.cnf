@@ -8,7 +8,7 @@
 sku_path = ./datasets
 sku_output_path = ./datasets_sanitized
 n_steps = 30
-n_sequences = 800
+n_sequences = 400
 
 
 [CLUSTERING]

@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 from tensorflow.keras.models import load_model
 from tslearn.clustering import TimeSeriesKMeans
+from sklearn.manifold import TSNE
+from sklearn.cluster import MeanShift, SpectralClustering, DBSCAN
 from autoencoder import create_autoencoder_models
 from pickle import dump, load
 import matplotlib.pyplot as plt
@@ -12,12 +14,21 @@ import matplotlib.pyplot as plt
 # 2. Datasets Clustering
 # =============================================================================
 
+def generate_color(min = 75, max = 200):
+    for i in range(10):
+        r = str(hex(np.random.randint(min, max))[2:])
+        g = str(hex(np.random.randint(min, max))[2:])
+        b = str(hex(np.random.randint(min, max))[2:])
+        r, g, b = [_c if len(_c) == 2 else f'0{_c}' for _c in [r,g,b] ]
+        return f'#{r}{g}{b}'
+
 class SKU_Clusterer:
     def __init__(self, n_clusters, sku_path, rnn_epochs, n_steps, 
                  encoder_output_units, decoder_output_units, k_means_n_iterations,
                  cold_start, *args, **kwargs):
         self.clusters = {}
         self.n_clusters = int(n_clusters)
+        self.use_kmeans = self.n_clusters > 0
         self.sku_path = sku_path
         self.n_epochs = int(rnn_epochs)
         self.n_steps = int(n_steps)
@@ -126,14 +137,33 @@ class SKU_Clusterer:
             plt.savefig('./loss/autoencoder_loss.png')
             
             classifier_inputs = self.enc.predict(dataset)
-            self.classifier = TimeSeriesKMeans(n_clusters=self.n_clusters, 
-                                           metric=self.k_means_metric, 
-                                           n_init=self.kmeans_iterations,
-                                           verbose=True,
-                                           max_iter=1000)
-            self.classifier.fit(classifier_inputs)
-            with open(self.classifier_path, 'wb') as model_file:
-                dump(self.classifier, model_file)
+            if self.use_kmeans > 0:
+                self.classifier = TimeSeriesKMeans(n_clusters=self.n_clusters, 
+                                               metric=self.k_means_metric, 
+                                               n_init=self.kmeans_iterations,
+                                               verbose=True,
+                                               max_iter=1000)
+                self.classifier.fit(classifier_inputs)
+                with open(self.classifier_path, 'wb') as model_file:
+                    dump(self.classifier, model_file)
+            
+# =============================================================================
+# Cluster visualisation
+# =============================================================================
+            else:
+                embedded = TSNE(n_components=2, perplexity=25).fit_transform(classifier_inputs)
+                plt.figure()
+                dbs = DBSCAN(n_jobs=-1, eps=3)
+                clusters = dbs.fit_predict(embedded)
+                unique_clusters = set(clusters)
+                for clas in unique_clusters:
+            #    for clas in unique_clusters:
+                    c = generate_color()
+                    mask = clusters == clas
+                    filtered = embedded[mask]
+                    plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=clas)
+                plt.legend()
+                plt.savefig('./clusters/clusters.png')
 
     def predict(self, sample):
         result = self.enc.predict(sample)

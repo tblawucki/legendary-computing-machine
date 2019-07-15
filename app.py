@@ -157,3 +157,33 @@ if __name__ == '__main__':
     writer.close()
 
 
+# =============================================================================
+#%% Clusterer test 
+# =============================================================================
+
+plt.figure()
+sample = input_sequence_filtered.reshape(-1, 50, 6)
+out = sc.autoenc.predict(sample)
+plt.plot(out[0, :, 0].ravel())
+plt.plot(sample[0, :, 0].ravel())
+
+
+
+
+
+
+
+
+#%%
+plt.figure()
+def generate_color(min = 75, max = 200):
+    for i in range(10):
+        r = str(hex(np.random.randint(min, max))[2:])
+        g = str(hex(np.random.randint(min, max))[2:])
+        b = str(hex(np.random.randint(min, max))[2:])
+        r, g, b = [_c if len(_c) == 2 else f'0{_c}' for _c in [r,g,b] ]
+        return f'#{r}{g}{b}'
+
+print(r, g, b, c)
+_x = np.array([1,2,2,3,4]) + np.random.randint(2, 10)
+plt.plot(_x, c=c)

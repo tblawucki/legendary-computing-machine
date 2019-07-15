@@ -122,8 +122,8 @@ if __name__ == '__main__':
     dbs = DBSCAN(n_jobs=-1, eps=3)
     clusters = dbs.fit_predict(embedded)
     unique_clusters = set(clusters)
-#    for clas, c in zip(unique_clusters, colors):
-    for clas in unique_clusters:
+    for clas, c in zip(unique_clusters, colors):
+#    for clas in unique_clusters:
         mask = clusters == clas
         filtered = embedded[mask]
         plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=clas)

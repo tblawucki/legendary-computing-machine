@@ -44,7 +44,7 @@ def create_autoencoder_models(dataset, n_steps, n_features, epochs=300, enc_unit
     es = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=50, mode='auto', restore_best_weights=True)
 
     autoencoder.compile(optimizer='adam', loss='mse', metrics=['mse'])
-    autoencoder.fit(dataset, dataset, epochs=epochs, batch_size = batch_size, shuffle=True, validation_split=0.1, callbacks=[es])
+    autoencoder.fit(dataset, dataset, epochs=epochs, batch_size = batch_size, shuffle=True, validation_split=0.1, callbacks=[])
 
     # =============================================================================
     # Save and return models    
