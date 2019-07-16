@@ -11,6 +11,8 @@
 sku_path = ./datasets_testing
 sku_output_path = ./datasets_testing_sanitized
 n_steps = 50
+encoding = utf8
+train_models = True
 
 [PREPROCESSING]
 remove_trend = False
@@ -20,21 +22,24 @@ crop_idx = 326
 drop_cols = 
 
 [CLUSTERING]
-n_clusters = 3
+n_clusters = -1
 k_means_n_iterations = 4
 k_means_metric = euclidean
-rnn_epochs = 100
-encoder_output_units = 10
+rnn_epochs = 20
+encoder_output_units = 50
 decoder_output_units = 300
 n_steps = 50
+batch_size = 32
 sku_path = ./datasets_testing_sanitized
-cold_start = False
 discriminative_columns = discriminative_col
+full_dataset = False
+cold_start = True
+
 
 [FORECASTING]
 rnn_cell = GRU
 n_layers = 2
-n_epochs = 120
+n_epochs = 1
 n_neurons = 125
 batch_size = 5
 activation = tanh
@@ -42,4 +47,5 @@ forecast_horizon = 12
 forecast_column = discriminative_col
 loss_metrics = mse
 sku_path = ./datasets_testing_sanitized/
-cold_start = True
+full_dataset = False
+cold_start = False

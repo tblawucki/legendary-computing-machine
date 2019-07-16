@@ -41,7 +41,8 @@ class SKU_Clusterer:
         self.autoencoder_path = './models/autoencoder.pkl'
         self.encoder_path = './models/encoder.pkl'
         self.decoder_path = './models/decoder.pkl'
-        self.classifier_path = './models/kmeans.pkl'
+        self.classifier_path = './models/classifier.pkl'
+        self.embedder_path = './models/embedder.pkl'
         self.k_means_metric = kwargs.get('k_means_metric', 'euclidean')
         if self.k_means_metric not in ['dtw', 'euclidean', 'softdtw']:
             print('invalid k_means metric, seting to `euclidean`')
@@ -50,6 +51,7 @@ class SKU_Clusterer:
         self.full_dataset = kwargs.get('full_dataset', False)
         self._load_datasets = self._load_datasets_full if self.full_dataset == 'True' else self._load_datasets_partial
         self.batch_size = int(kwargs.get('batch_size', 1))
+
     def filter_dataset(self, df):
         chosen_cols = []
         for c in self.discriminative_cols:
@@ -59,7 +61,7 @@ class SKU_Clusterer:
                     chosen_cols.append(c)
         self.discriminative_cols = chosen_cols
         if self.discriminative_cols != []:
-            print(f'RUNNING FILTERING on columns:{", ".join(self.discriminative_cols)}')
+#            print(f'RUNNING FILTERING on columns:{", ".join(self.discriminative_cols)}')
             df = df.filter(items = self.discriminative_cols)
         else:
             print('No discriminative columns passed, running algoritm on all columns')
@@ -87,9 +89,6 @@ class SKU_Clusterer:
                                                encoding=self.encoding,
                                                sep=';')
             df = self.filter_dataset(df)
-            n_splits = df.shape[0] // self.n_steps
-            trim = df.shape[0] % self.n_steps
-    #        df = df[trim:]
             for offset in range(df.shape[0] - self.n_steps):
                 chunk = df[offset : offset + self.n_steps]
                 datasets.append(chunk.values)
@@ -99,19 +98,23 @@ class SKU_Clusterer:
         models_exists = os.path.isfile(self.autoencoder_path) \
                         and os.path.isfile(self.encoder_path) \
                         and os.path.isfile(self.decoder_path)
-        k_means_exists = os.path.isfile(self.classifier_path)
-        if not (models_exists and k_means_exists):
+        classifier_exists = os.path.isfile(self.classifier_path)
+        embedder_exists = os.path.isfile(self.embedder_path)
+        if not (models_exists and classifier_exists):
             print('NO MODELS FOUND, COLD START REQUIRED...')
         if not cold_start and models_exists:
-            print('MODELS EXISTS, LOADING...')
+            print('AUTOENCODER MODELS EXISTS, LOADING...')
             self.autoenc = load_model(self.autoencoder_path)
             self.enc = load_model(self.encoder_path)
             self.dec = load_model(self.decoder_path)
-        if not cold_start and k_means_exists:
-            print('K_MEANS MODEL EXISTS, LOADING...')
+        if not cold_start and classifier_exists:
+            print('CLASSIFIER MODEL EXISTS, LOADING...')
             with open(self.classifier_path, 'rb') as model_file:
                 self.classifier = load(model_file)
-        return models_exists and k_means_exists and not cold_start
+        if not cold_start and embedder_exists:
+            with open(self.embedder_path, 'rb') as model_file:
+                self.embedder = load(model_file)
+        return models_exists and classifier_exists and embedder_exists and not cold_start
 
     def train(self, dataset=None):
         if dataset is None:
@@ -137,34 +140,51 @@ class SKU_Clusterer:
             plt.savefig('./loss/autoencoder_loss.png')
             
             classifier_inputs = self.enc.predict(dataset)
-            if self.use_kmeans > 0:
+            self.embedder = TSNE(n_components=2, perplexity=40, random_state=42)
+            embedded = self.embedder.fit_transform(classifier_inputs)
+            
+            print('CLASSIFIER INPUTS', classifier_inputs.shape)
+            print('EMBEDED SHAPE', classifier_inputs.shape)
+            if self.use_kmeans:
+                plt.figure()
                 self.classifier = TimeSeriesKMeans(n_clusters=self.n_clusters, 
                                                metric=self.k_means_metric, 
                                                n_init=self.kmeans_iterations,
                                                verbose=True,
                                                max_iter=1000)
-                self.classifier.fit(classifier_inputs)
-                with open(self.classifier_path, 'wb') as model_file:
-                    dump(self.classifier, model_file)
-            
+                self.classifier.fit(embedded)
+                self.classifier.transform = self.classifier.predict #hotfix
+            else:
+                print('CLUSTER COUNT NOT SPECIFIED, UNSUPERVISED CLUSTERING...')
+#                self.classifier = MeanShift(n_jobs=-1)
+                self.classifier = DBSCAN(eps=3, n_jobs=-1)
+                self.classifier.transform = self.classifier.fit_predict
+            with open(self.classifier_path, 'wb') as model_file:
+                dump(self.classifier, model_file)
+            with open(self.embedder_path, 'wb') as model_file:
+                dump(self.embedder, model_file)
+
 # =============================================================================
 # Cluster visualisation
 # =============================================================================
-            else:
-                embedded = TSNE(n_components=2, perplexity=25).fit_transform(classifier_inputs)
-                plt.figure()
-                dbs = DBSCAN(n_jobs=-1, eps=3)
-                clusters = dbs.fit_predict(embedded)
-                unique_clusters = set(clusters)
-                for clas in unique_clusters:
-            #    for clas in unique_clusters:
-                    c = generate_color()
-                    mask = clusters == clas
-                    filtered = embedded[mask]
-                    plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=clas)
-                plt.legend()
-                plt.savefig('./clusters/clusters.png')
+            clusters = self.classifier.transform(embedded)
+            unique_clusters = set(clusters)
+            plt.figure()
+            for clas in unique_clusters:
+        #    for clas in unique_clusters:
+                c = generate_color()
+                mask = clusters == clas
+                filtered = embedded[mask]
+                plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=clas)
+            plt.legend()
+            plt.savefig('./clusters/clusters.png')
 
+
+    def embed(self, dataset):
+        flattened = self.enc.predict(dataset)
+        embedded = self.embedder.fit_transform(flattened)
+        return embedded
+        
     def predict(self, sample):
         result = self.enc.predict(sample)
         return result
@@ -173,7 +193,24 @@ class SKU_Clusterer:
         print(dataset.shape)
         return self.enc.predict(dataset)
     
-    def cluster(self, dataset):
+    def cluster(self, dataset, sample=None, plot_clusters=False):
+        if sample is not None:
+            dataset = np.vstack([sample, dataset])
         compressed_dataset = self.compress_dataset(dataset)
-        print(compressed_dataset.shape)
-        return dataset, self.classifier.predict(compressed_dataset)
+        embedded_dataset = self.embedder.fit_transform(compressed_dataset)
+        classes = self.classifier.fit_predict(embedded_dataset)
+        
+        if plot_clusters:
+            plt.figure()
+            unique_clusters = set(classes)
+            for clas in unique_clusters:
+                c = generate_color()
+                mask = classes == clas
+                filtered = embedded_dataset[mask]
+                plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=clas)
+            if sample is not None:
+                print(embedded_dataset[0, 0], embedded_dataset[0, 1])
+                plt.scatter(embedded_dataset[0, 0], embedded_dataset[0, 1], c='red', marker='x')
+            plt.legend()
+            
+        return dataset, classes
