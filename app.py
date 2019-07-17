@@ -5,29 +5,31 @@ Complete app for SKU preprocessing, clustering and forecasting
 @author: t.blawucki@smartgeometries.pl
 @company: SmartGeometries SP. Z.O.O
 """
-import configparser
+import os
+os.environ['VERBOSITY_LEVEL'] = '0'
+
 import pandas as pd
 import numpy as np
-import os
 import sys
 import matplotlib.pyplot as plt
 from preprocessor import SKU_Preprocessor
 from clusterer import SKU_Clusterer
 from forecaster import SKU_Forecaster
 import sklearn.metrics as metrics
+from utils import print, ConfigSanitizer
 
 
 def generate_report():
     pass
 
-if __name__ == '__main__':
-    config = configparser.ConfigParser()
-    try:
-        config.read('./test_config.cnf')
-    except:
-        print('No config file!')
-        sys.exit(-1)
+def cleanup():
+    csv_files = [f for f in os.listdir('./') if './csv' in f]
+    print('Files to remove: ', csv_files, verbosity=1)
+#    for f in csv_files:
+#        os.remove(csv_files)
 
+if __name__ == '__main__':
+    config = ConfigSanitizer('./test_config.cnf')
     #configuration sections
     default_section = config['DEFAULT']
     preprocessing_section = config['PREPROCESSING']
@@ -41,14 +43,14 @@ if __name__ == '__main__':
     if default_section['train_models'] == 'True': 
         print('RUNNING TRAINING SECTION...')
         #preprocessing
-        sp = SKU_Preprocessor(**{**default_section, **preprocessing_section})
+        sp = SKU_Preprocessor(**preprocessing_section)
         sp.run()
     
         #clustering
         sc = SKU_Clusterer(**clustering_section)
         dsts = sc._load_datasets()
         sc.train()
-    
+        
         #forecasting
         sf = SKU_Forecaster(**forecasting_section)
         X, y, columns = sf._load_datasets()
@@ -66,6 +68,8 @@ if __name__ == '__main__':
             y_cl = y[mask]
             forecaster = sf.train(X_cl, y_cl, model_name=str(cl))
             forecasters[cl] = forecaster
+        
+        cleanup()
     else:
         print('OMITTING TRAINING SECTION...')
 #%%
@@ -78,7 +82,7 @@ if __name__ == '__main__':
     # 2. Preparing clusters, fitting sample
     sc = SKU_Clusterer(**clustering_section)
     if not sc.load_models():
-        print('\nSKU_Clusterer model not trained, Aborting...\n')
+        print('\nSKU_Clusterer model not trained, Aborting...\n', verbosity=2)
         sys.exit(-1)    
         
     full_data = sc._load_datasets()
