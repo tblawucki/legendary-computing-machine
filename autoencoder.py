@@ -14,12 +14,12 @@
 
 # =============================================================================
 # Keras 
-import keras
-from keras import Sequential, Model
-from keras.layers import Input, LSTM, GRU, RepeatVector, TimeDistributed, Dense
-from keras.models import load_model
-from keras.callbacks import EarlyStopping
-from keras.utils import plot_model
+import tensorflow.keras as keras
+from tensorflow.keras import Sequential, Model
+from tensorflow.keras.layers import Input, LSTM, GRU, RepeatVector, TimeDistributed, Dense
+from tensorflow.keras.models import load_model
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.utils import plot_model
 # =============================================================================
 from utils import print
 
@@ -158,7 +158,8 @@ if __name__ == '__main__':
                 'enc_units':[50],
                 'dec_units':[300],
                 'batch_size':[32],
-                'scan':[True]
+                'scan':[True],
+                'early_stopping':[True]
             }
     results = talos.Scan(dsts, dsts, params=params, model=create_autoencoder_models, debug=True)
     best_params = results.data.sort_values(by=['val_loss'], ascending=True).iloc[0].to_dict()

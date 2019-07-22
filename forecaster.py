@@ -131,9 +131,20 @@ class SKU_Forecaster:
         return np.array(datasets, dtype=np.float64), \
                np.array(labels, dtype=np.float64), \
                columns
-
+    
+    def load_model(self, model_name):
+        model_files = os.listdir('./models/')
+        model_exists = f'forecaster_{model_name}.pkl' in model_files
+        if model_exists:
+            self.trained = True
+            print(f'MODEL forecaster_{model_name} EXISTS, LOADING...')
+            forecaster_file = f'forecaster_{model_name}.pkl'
+            self.forecaster = load_model(os.path.join('./models/', forecaster_file))
+            return True
+        print(f'FILE `forecaster_{model_name}.pkl` NOT EXIST')
+        return False
+    
     def train(self, X, y, model_name='0'):
-        self.trained = True
         self.input_sequences = X
         self.output_sequences = y
         params = { 'rnn_cell':self.rnn_cell,
@@ -150,13 +161,8 @@ class SKU_Forecaster:
                    'early_stopping':self.early_stopping,
                    'scan':[True]}
         
-        model_files = os.listdir('./models/')
-        model_exists = f'forecaster_{model_name}' in ''.join(model_files)
-        if not self.cold_start and model_exists:
-            print('MODEL EXISTS, LOADING...')
-            forecaster_file = f'forecaster_{model_name}.pkl'
-            self.forecaster = load_model(os.path.join('./models/', forecaster_file))
-        else:
+        if not self.load_model(model_name) or self.cold_start:
+            
             print('TRANING MODEL...')
             results = talos.Scan(X, y, params=params, model=create_forecaseter_model)
             best_params = results.data.sort_values(by=['val_loss'], ascending=True).iloc[0].to_dict()
@@ -164,7 +170,8 @@ class SKU_Forecaster:
             best_params['scan'] = False
             best_params['model_name'] = model_name
             self.forecaster = create_forecaseter_model(X, y, params=best_params)
-            
+            self.trained = True
+
 #            self.forecaster = results.best_model(metric='val_loss')
             hist = self.forecaster.history.history
             loss = hist['loss']
@@ -179,7 +186,7 @@ class SKU_Forecaster:
         
     def predict(self, X):
         if not self.trained:
-            print('Model not trained yet')
+            print('Model not trained yet', verbosity=1)
             return None
         prediction = self.forecaster.predict(X)
         return prediction
@@ -187,20 +194,17 @@ class SKU_Forecaster:
     
     
 if __name__ == '__main__':
-    import configparser
-    import sys
+    from utils import ConfigSanitizer
     
-    config = configparser.ConfigParser()
-    try:
-        config.read('./test_config.cnf')
-    except:
-        print('No config file!')
-        sys.exit(-1)
+    config = ConfigSanitizer('./test_config.cnf')
 
     #configuration sections
     forecasting_section = config['FORECASTING']
     
-    sf = SKU_Forecaster(**forecasting_section)
-    X, y, columns = sf._load_datasets()
-    y = y.reshape(*y.shape, 1)
-    forecaster = sf.train(X, y, model_name='TestModelForecaster')
+#    sf = SKU_Forecaster(**forecasting_section)
+#    X, y, columns = sf._load_datasets()
+#    y = y.reshape(*y.shape, 1)
+#    forecaster = sf.train(X, y, model_name='0')
+#    
+    forecaster = SKU_Forecaster(**forecasting_section)
+    forecaster.load_model(model_name='0')

@@ -3,32 +3,27 @@
 import os
 import numpy as np
 import pandas as pd
-from keras.models import load_model
+import tensorflow.keras as keras
+from tensorflow.keras.models import load_model
 from tslearn.clustering import TimeSeriesKMeans
 from sklearn.manifold import TSNE
 from sklearn.cluster import MeanShift, SpectralClustering, DBSCAN
+from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 from autoencoder import create_autoencoder_models
 from pickle import dump, load
 import matplotlib.pyplot as plt
 import talos
 import sys
-from utils import print
+from utils import print, generate_color
 # =============================================================================
 # 2. Datasets Clustering
 # =============================================================================
 
-def generate_color(min = 75, max = 200):
-    for i in range(10):
-        r = str(hex(np.random.randint(min, max))[2:])
-        g = str(hex(np.random.randint(min, max))[2:])
-        b = str(hex(np.random.randint(min, max))[2:])
-        r, g, b = [_c if len(_c) == 2 else f'0{_c}' for _c in [r,g,b] ]
-        return f'#{r}{g}{b}'
-
 class SKU_Clusterer:
     def __init__(self, *args, **kwargs):
 #clustering params
-        self.clusters = {}
+        self.classifier=None
+        self.clusters_indices = {}
         self.n_clusters = int(kwargs['n_clusters'])
         self.use_kmeans = self.n_clusters > 0
         self.kmeans_iterations = int(kwargs['k_means_n_iterations'])
@@ -51,12 +46,17 @@ class SKU_Clusterer:
         self.encoder_path = './models/encoder.pkl'
         self.decoder_path = './models/decoder.pkl'
         self.classifier_path = './models/classifier.pkl'
+        self.kmeans_path = './models/kmeans_model.pkl'
         self.embedder_path = './models/embedder.pkl'
+        self.config_path = './models/clusterer_config.pkl'
 #other params
         self.full_dataset = kwargs.get('full_dataset', False)
         self.cold_start = True if kwargs['cold_start'] == 'True' else False
         self.encoding = kwargs.get('encoding', 'utf8')
         self._load_datasets = self._load_datasets_full if self.full_dataset == 'True' else self._load_datasets_partial
+
+        if not self.cold_start:
+            self.load_configuration()
 
     def filter_dataset(self, df):
         chosen_cols = []
@@ -100,11 +100,32 @@ class SKU_Clusterer:
                 datasets.append(chunk.values)
         return np.array(datasets, dtype=np.float64)
         
+    def load_configuration(self):
+        if not os.path.exists(self.config_path):
+            print('Config file not found...', verbosity=1)
+            return
+        config = open(self.config_path, "rb")
+        self.clusters_indices = load(config)
+        self.n_clusters = load(config)
+        self.use_kmeans = load(config)
+        self.train_dataset = load(config)
+        config.close()
+        
+    def save_configuration(self):
+        config = open(self.config_path, "wb")
+        dump(self.clusters_indices, config)
+        dump(self.n_clusters, config)
+        dump(self.use_kmeans, config)
+        dump(self.train_dataset, config)
+        config.close()
+
+
     def load_models(self, cold_start=False):
         models_exists = os.path.isfile(self.autoencoder_path) \
                         and os.path.isfile(self.encoder_path) \
                         and os.path.isfile(self.decoder_path)
         classifier_exists = os.path.isfile(self.classifier_path)
+        kmeans_exists = os.path.isfile(self.kmeans_path)
         embedder_exists = os.path.isfile(self.embedder_path)
         if not (models_exists and classifier_exists):
             print('NO MODELS FOUND, COLD START REQUIRED...', verbosity=1)
@@ -117,6 +138,10 @@ class SKU_Clusterer:
             print('CLASSIFIER MODEL EXISTS, LOADING...')
             with open(self.classifier_path, 'rb') as model_file:
                 self.classifier = load(model_file)
+        if not cold_start and kmeans_exists:
+            print('K_MEANS MODEL EXISTS, LOADING...')
+            with open(self.kmeans_path, 'rb') as model_file:
+                self.k_means_classifier = load(model_file)
         if not cold_start and embedder_exists:
             with open(self.embedder_path, 'rb') as model_file:
                 self.embedder = load(model_file)
@@ -156,33 +181,42 @@ class SKU_Clusterer:
             plt.legend()
             plt.title('Autoencoder loss')
             plt.savefig('./loss/autoencoder_loss.png')
-            
+            self.train_dataset = dataset
             classifier_inputs = self.enc.predict(dataset)
             self.embedder = TSNE(n_components=2, perplexity=40, random_state=42)
             embedded = self.embedder.fit_transform(classifier_inputs)
-            if self.use_kmeans:
-                plt.figure()
-                self.classifier = TimeSeriesKMeans(n_clusters=self.n_clusters, 
-                                               metric=self.k_means_metric, 
-                                               n_init=self.kmeans_iterations,
-                                               verbose=True,
-                                               max_iter=1000)
-                self.classifier.fit(embedded)
-                self.classifier.transform = self.classifier.predict #hotfix
-            else:
-                print('CLUSTER COUNT NOT SPECIFIED, UNSUPERVISED CLUSTERING...', verbosity=1)
-#                self.classifier = MeanShift(n_jobs=-1)
-                self.classifier = DBSCAN(eps=3, n_jobs=-1)
-                self.classifier.transform = self.classifier.fit_predict
+            
+            if not self.use_kmeans:
+                print('CLUSTER COUNT NOT SPECIFIED, CALCULATING CLUSTER NUMBER...', verbosity=1)
+                self.u_classifier = DBSCAN(eps=3, n_jobs=-1)
+                classes = self.u_classifier.fit_predict(embedded)
+                self.n_clusters = len(set(classes)) 
+                self.use_kmeans = True
+            self.k_means_classifier = TimeSeriesKMeans(n_clusters=self.n_clusters, 
+                                           metric=self.k_means_metric, 
+                                           n_init=self.kmeans_iterations,
+                                           verbose=True,
+                                           max_iter=1000)
+            self.k_means_classifier.fit(embedded)
+            self.k_means_classifier.transform = self.k_means_classifier.predict #hotfix
+            self.clusters_indices = self.k_means_classifier.fit_predict(embedded)
+            
+            self.classifier = KNeighborsClassifier(n_neighbors=5, n_jobs=-1)
+            self.classifier.fit(embedded, self.clusters_indices)
+            
             with open(self.classifier_path, 'wb') as model_file:
                 dump(self.classifier, model_file)
             with open(self.embedder_path, 'wb') as model_file:
                 dump(self.embedder, model_file)
+            with open(self.kmeans_path, 'wb') as model_file:
+                dump(self.k_means_classifier, model_file)
+            
+            self.save_configuration()
 
 # =============================================================================
 # Cluster visualisation
 # =============================================================================
-            clusters = self.classifier.transform(embedded)
+            clusters = self.k_means_classifier.transform(embedded)
             unique_clusters = set(clusters)
             plt.figure()
             for clas in unique_clusters:
@@ -190,7 +224,7 @@ class SKU_Clusterer:
                 c = generate_color()
                 mask = clusters == clas
                 filtered = embedded[mask]
-                plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=clas)
+                plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=f'cluster {clas + 1}')
             plt.legend()
             plt.savefig('./clusters/clusters.png')
 
@@ -204,15 +238,33 @@ class SKU_Clusterer:
         result = self.enc.predict(sample)
         return result
     
+    def predict_class(self, sample, plot_cluster=False):
+        extended_dataset = np.vstack(( self.train_dataset, sample.reshape(-1, *sample.shape) ))
+        embedded_space = self.embed(extended_dataset)
+        sample_coords = embedded_space[-1]
+        nbrs = NearestNeighbors(n_neighbors=6, algorithm='ball_tree').fit(embedded_space[:-1])
+        distances, indices = nbrs.kneighbors(sample_coords.reshape(1, -1))    
+        n_classes, classes_counts = np.unique(self.clusters_indices[indices], return_counts = True)
+        cls = n_classes[np.argmax(np.unique(classes_counts))]
+        print(distances)
+        print(indices)
+        print(self.clusters_indices[indices])
+        print(cls)
+        if plot_cluster:
+            plt.figure()
+            plt.scatter(embedded_space[:,0], embedded_space[:,1])
+            plt.scatter(sample_coords[0], sample_coords[1], marker='x', c='red')
+        return cls, distances, indices
+    
     def compress_dataset(self, dataset):
         return self.enc.predict(dataset)
     
     def cluster(self, dataset, sample=None, plot_clusters=False):
         if sample is not None:
-            dataset = np.vstack([sample, dataset])
+            dataset = np.vstack((sample, dataset))
         compressed_dataset = self.compress_dataset(dataset)
         embedded_dataset = self.embedder.fit_transform(compressed_dataset)
-        classes = self.classifier.fit_predict(embedded_dataset)
+        classes = self.k_means_classifier.fit_predict(embedded_dataset)
         
         if plot_clusters:
             plt.figure()
@@ -221,7 +273,7 @@ class SKU_Clusterer:
                 c = generate_color()
                 mask = classes == clas
                 filtered = embedded_dataset[mask]
-                plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=clas)
+                plt.scatter(filtered[:, 0], filtered[:, 1], c=c, label=f'cluster {clas + 1}')
             if sample is not None:
                 plt.scatter(embedded_dataset[0, 0], embedded_dataset[0, 1], c='red', marker='x')
             plt.legend()
@@ -230,18 +282,35 @@ class SKU_Clusterer:
     
     
 if __name__ == '__main__':
-    import configparser
+    from utils import ConfigSanitizer
     
-    config = configparser.ConfigParser()
-    try:
-        config.read('./test_config.cnf')
-    except:
-        print('No config file!', verbosity=2)
-        sys.exit(-1)
-
-    #configuration sections
+    config = ConfigSanitizer('./test_config.cnf')
     clustering_section = config['CLUSTERING']
     
     cs = SKU_Clusterer(**clustering_section)
     cs.train()
     
+    
+    for i in range(200, 250):
+        sample =cs.train_dataset[i]
+        distances, indices = cs.predict_class(sample, plot_cluster=True)
+        neighbours = cs.train_dataset[indices].reshape(-1, 50)
+        
+        plt.figure()
+        plt.plot(neighbours.T)
+        plt.plot(sample, '--', linewidth=3)
+
+    
+#    
+#    knn = KNeighborsClassifier(n_neighbors=5, n_jobs=-1)
+#    
+#    A = np.array([(0,0), (0,1), (1,1), (2,1) ,(20,30), (22, 31), (19,32)])
+#    Y = np.array([[5],[5],[5],[0],[1],[1],[1]])
+#    sample = np.array([(15,15)])
+
+#    knn.fit(A, Y)
+#    pred = knn.predict(np.array([(-1, -1)]))
+#    print(pred)
+#    
+#    nbrs = NearestNeighbors(n_neighbors=4, algorithm='ball_tree').fit(A)
+#    distances, indices = nbrs.kneighbors(sample)    

@@ -72,6 +72,9 @@ class SKU_Preprocessor:
         self.crop_idx = int(crop_idx) if crop_idx != '' else None
         self.drop_cols = drop_cols.split(';') if drop_cols else []
         self.encoding = kwargs.get('encoding', 'utf8')
+        self.forecast_col = kwargs['forecast_column']
+        self.forecast_col_idx = -1
+        self.n_features = 1
 
     def fit_transform(self, df, df_key):
         self.fit(df, df_key)
@@ -90,6 +93,8 @@ class SKU_Preprocessor:
         and scaling dataset through all columns in target dataset
         '''
         cols = df.columns
+        self.forecast_col_idx = np.argmax(df.columns == self.forecast_col)
+        self.n_features = len(cols)
         trend_remover = self.transform_ops[df_key]['trend_remover']
         standarizer = self.transform_ops[df_key]['standarizer']
         scaler = self.transform_ops[df_key]['scaler']
@@ -113,6 +118,21 @@ class SKU_Preprocessor:
         if self.remove_trend:
             df = trend_remover.inverse_transform(df)
         return pd.DataFrame(df, columns = cols)
+
+    def inverse_transform_seq(self, seq, key):
+        seq = seq.reshape(*seq.shape, -1)
+        if seq.shape[-1] != self.n_features and seq.shape[-1] == 1:
+            seq = np.repeat(seq, self.n_features).reshape(-1, self.n_features)
+        trend_remover = self.transform_ops[key]['trend_remover']
+        standarizer = self.transform_ops[key]['standarizer']
+        scaler = self.transform_ops[key]['scaler']
+        if self.standarize:
+            seq = standarizer.inverse_transform(seq)
+        if self.scale:
+            seq = scaler.inverse_transform(seq)
+        if self.remove_trend:
+            seq = trend_remover.inverse_transform(seq)
+        return seq[:, self.forecast_col_idx]
 
     def _remove_columns(self, df):
         '''
@@ -161,5 +181,51 @@ class SKU_Preprocessor:
             df = self.fit_transform(df, file)
 #            df = self.inverse_transform(df, file)
             self._save_dataframe(df, file)
-        self.dataframes[file] = df
+            self.dataframes[file] = df
         return self.dataframes
+    
+    
+if __name__ == '__main__':
+    from utils import ConfigSanitizer
+    import matplotlib.pyplot as plt
+    
+    config = ConfigSanitizer('./config.cnf')
+    
+    #configuration sections
+    preprocessing_section = config['PREPROCESSING']
+    
+    
+    sp = SKU_Preprocessor(**preprocessing_section)
+    sp.run()
+    
+    sku_key =  list(sp.dataframes.keys())[2]
+    df = sp.dataframes[sku_key]
+    rescaled_df = sp.inverse_transform(df, sku_key)
+    
+    true_df = pd.read_csv(os.path.join(preprocessing_section["sku_path"],sku_key), sep=';', encoding=preprocessing_section['encoding'])
+    true_df = true_df['zmniejszenie_stanu']
+    plt.plot(df.values.ravel(), 'x', alpha=0.3)
+    plt.plot(true_df.values.ravel(), '--', alpha=0.3)
+    plt.plot(rescaled_df.values.ravel(), 'o', alpha=0.3)
+    
+    
+    output_seq = df['zmniejszenie_stanu'][:12].values
+    predicted_seq = output_seq + 0.001
+    
+    plt.figure()
+    plt.plot(output_seq)
+    plt.plot(predicted_seq)
+    plt.figure()
+    plt.plot(true_df[:12])
+    
+    
+    plt.figure()
+    rescaled_true = sp.inverse_transform_seq(output_seq, sku_key)
+    rescaled_pred = sp.inverse_transform_seq(predicted_seq, sku_key)
+    plt.figure()
+    plt.plot(rescaled_true + 20, alpha=0.5)
+    plt.plot(rescaled_pred + 40, alpha=0.5)
+    plt.plot(true_df[:12])
+
+#    plt.plot(true_df['zmniejszenie_stanu'][:12])
+    
